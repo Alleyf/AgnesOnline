@@ -8,7 +8,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Slider } from '@/components/ui/slider';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -38,19 +37,40 @@ import { useAssets, type IAssetItem } from '@/hooks/useAssets';
 // ---------------------------------------------------------------------------
 
 interface VideoGenParams {
+  aspectRatio: '16:9' | '9:16' | '1:1' | '4:3' | '3:4';
   resolution: '480p' | '720p' | '1080p';
-  duration: 5 | 10 | 16;
-  motionStrength: number;
-  fps: 24 | 30;
+  duration: 5 | 10;
+  frameRate: 24 | 30;
   seed: string;
+  negativePrompt: string;
+}
+
+// 根据宽高比和分辨率计算 width/height
+function computeSize(aspectRatio: VideoGenParams['aspectRatio'], resolution: VideoGenParams['resolution']) {
+  const sizes: Record<string, Record<string, [number, number]>> = {
+    '480p':  { '16:9': [854, 480],  '9:16': [480, 854],  '1:1': [480, 480],  '4:3': [640, 480],  '3:4': [480, 640] },
+    '720p':  { '16:9': [1280, 720], '9:16': [720, 1280], '1:1': [720, 720],  '4:3': [960, 720],  '3:4': [720, 960] },
+    '1080p': { '16:9': [1920, 1080], '9:16': [1080, 1920], '1:1': [1080, 1080], '4:3': [1440, 1080], '3:4': [1080, 1440] },
+  };
+  return sizes[resolution]?.[aspectRatio] ?? [1280, 720];
+}
+
+// 根据时长和帧率计算 numFrames (必须遵循 8n+1 规则, ≤441)
+function computeNumFrames(duration: number, frameRate: number): number {
+  const raw = duration * frameRate;
+  // 找到最接近的 8n+1 值
+  const n = Math.round((raw - 1) / 8);
+  const frames = 8 * n + 1;
+  return Math.min(frames, 441);
 }
 
 const DEFAULT_PARAMS: VideoGenParams = {
+  aspectRatio: '16:9',
   resolution: '720p',
   duration: 5,
-  motionStrength: 50,
-  fps: 24,
+  frameRate: 24,
   seed: '',
+  negativePrompt: '',
 };
 
 // ---------------------------------------------------------------------------
@@ -339,6 +359,25 @@ function AdvancedParamsPanel({
       <CollapsibleContent className="mt-4 space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl border border-border/30 bg-muted/20">
           <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">宽高比</Label>
+            <Select
+              value={params.aspectRatio}
+              onValueChange={(v) => onChange({ ...params, aspectRatio: v as VideoGenParams['aspectRatio'] })}
+            >
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="16:9">16:9 横屏</SelectItem>
+                <SelectItem value="9:16">9:16 竖屏</SelectItem>
+                <SelectItem value="1:1">1:1 方形</SelectItem>
+                <SelectItem value="4:3">4:3 传统横屏</SelectItem>
+                <SelectItem value="3:4">3:4 竖屏演示</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">分辨率</Label>
             <Select
               value={params.resolution}
@@ -367,7 +406,6 @@ function AdvancedParamsPanel({
               <SelectContent>
                 <SelectItem value="5">5 秒</SelectItem>
                 <SelectItem value="10">10 秒</SelectItem>
-                <SelectItem value="16">16 秒</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -375,8 +413,8 @@ function AdvancedParamsPanel({
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">帧率</Label>
             <Select
-              value={String(params.fps)}
-              onValueChange={(v) => onChange({ ...params, fps: Number(v) as VideoGenParams['fps'] })}
+              value={String(params.frameRate)}
+              onValueChange={(v) => onChange({ ...params, frameRate: Number(v) as VideoGenParams['frameRate'] })}
             >
               <SelectTrigger className="h-9 text-sm">
                 <SelectValue />
@@ -399,21 +437,23 @@ function AdvancedParamsPanel({
             />
           </div>
 
-          <div className="space-y-2 sm:col-span-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs text-muted-foreground">运动强度</Label>
-              <span className="text-xs text-muted-foreground tabular-nums">
-                {params.motionStrength <= 33 ? '低' : params.motionStrength <= 66 ? '中' : '高'}
-              </span>
-            </div>
-            <Slider
-              value={[params.motionStrength]}
-              onValueChange={([v]) => onChange({ ...params, motionStrength: v })}
-              min={10}
-              max={100}
-              step={1}
-              className="w-full"
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">负向提示词</Label>
+            <Input
+              value={params.negativePrompt}
+              onChange={(e) => onChange({ ...params, negativePrompt: e.target.value })}
+              placeholder="描述需要避免的内容"
+              className="h-9 text-sm"
             />
+          </div>
+
+          {/* 尺寸预览 */}
+          <div className="space-y-1 sm:col-span-2">
+            <p className="text-xs text-muted-foreground">
+              输出尺寸：{computeSize(params.aspectRatio, params.resolution).join(' × ')} ·
+              {computeNumFrames(params.duration, params.frameRate)} 帧 ·
+              ≈ {params.duration} 秒
+            </p>
           </div>
         </div>
       </CollapsibleContent>
@@ -490,7 +530,17 @@ export default function VideoGenPage() {
       abortRef.current = controller;
 
       try {
-        const result = await generateVideo(trimmed, controller.signal, undefined, (progress, status) => {
+        const [width, height] = computeSize(params.aspectRatio, params.resolution);
+        const numFrames = computeNumFrames(params.duration, params.frameRate);
+        const apiParams = {
+          width,
+          height,
+          numFrames,
+          frameRate: params.frameRate,
+          ...(params.seed ? { seed: Number(params.seed) } : {}),
+          ...(params.negativePrompt ? { negativePrompt: params.negativePrompt } : {}),
+        };
+        const result = await generateVideo(trimmed, controller.signal, apiParams, (progress, status) => {
           setVideoProgress(progress);
           setVideoStatus(status);
         });
@@ -513,14 +563,25 @@ export default function VideoGenPage() {
         abortRef.current = null;
       }
     },
-    [prompt, tokenReady, addAsset],
+    [prompt, tokenReady, params, addAsset],
   );
 
   const handleDownload = useCallback(async (record: IVideoResult) => {
     try {
       toast.info('正在准备下载...');
-      const response = await fetch(record.url);
-      const blob = await response.blob();
+      let blob: Blob;
+      
+      // 检查是否是data URL
+      if (record.url.startsWith('data:')) {
+        // 从data URL创建Blob
+        const response = await fetch(record.url);
+        blob = await response.blob();
+      } else {
+        // 普通URL，使用fetch获取
+        const response = await fetch(record.url);
+        blob = await response.blob();
+      }
+      
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = blobUrl;

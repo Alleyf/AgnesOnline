@@ -376,8 +376,19 @@ export default function AssetsPage() {
 
   const handleDownload = useCallback(async (asset: IAssetItem) => {
     try {
-      const response = await fetch(asset.url);
-      const blob = await response.blob();
+      let blob: Blob;
+      
+      // 检查是否是data URL
+      if (asset.url.startsWith('data:')) {
+        // 从data URL创建Blob
+        const response = await fetch(asset.url);
+        blob = await response.blob();
+      } else {
+        // 普通URL，使用fetch获取
+        const response = await fetch(asset.url);
+        blob = await response.blob();
+      }
+      
       const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = objectUrl;

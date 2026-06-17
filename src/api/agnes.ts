@@ -34,18 +34,17 @@ export interface IVideoResult {
 
 export interface IImageGenParams {
   size: '1024x1024' | '1792x1024' | '1024x1792' | '1152x896' | '896x1152';
-  n: number;
-  quality: 'standard' | 'hd';
+  n: number; /** 生成数量，通过并发请求实现，非 API 参数 */
   seed?: number;
-  guidanceScale: number;
 }
 
 export interface IVideoGenParams {
-  resolution: '480p' | '720p' | '1080p';
-  duration: 5 | 10 | 16;
-  motionStrength: 'low' | 'medium' | 'high';
-  fps: 24 | 30;
+  width: number;
+  height: number;
+  numFrames: number;   /** 必须 ≤ 441 且遵循 8n+1 规则 */
+  frameRate: number;   /** 1-60 */
   seed?: number;
+  negativePrompt?: string;
 }
 
 export type AssetType = 'image' | 'video';
@@ -211,65 +210,148 @@ export async function generateImage(
   const mergedParams: IImageGenParams = {
     size: params?.size ?? '1024x1024',
     n: params?.n ?? 1,
-    quality: params?.quality ?? 'standard',
-    guidanceScale: params?.guidanceScale ?? 7.5,
     ...(params?.seed !== undefined && params.seed !== null ? { seed: params.seed } : {}),
   };
 
+  // 构建符合 api-image.md 契约的请求体
+  // n 不作为 API 参数传递，通过并发请求实现多张生成
   const body: Record<string, unknown> = {
     model: 'agnes-image-2.1-flash',
     prompt,
-    n: mergedParams.n,
     size: mergedParams.size,
-    quality: mergedParams.quality,
+    extra_body: {
+      response_format: 'url',
+    },
   };
 
   if (mergedParams.seed !== undefined) {
     body.seed = mergedParams.seed;
   }
-  if (mergedParams.guidanceScale !== 7.5) {
-    body.guidance_scale = mergedParams.guidanceScale;
+
+  const n = Math.max(1, mergedParams.n);
+
+  logger.info('[Agnes] 图像生成请求:', { prompt: prompt.slice(0, 80), size: mergedParams.size, n });
+
+  // 单张生成：直接请求
+  if (n === 1) {
+    const response = await fetch(`${BASE_URL}/images/generations`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal,
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => '');
+      let errorMsg = `图像生成失败 (${response.status})`;
+      try {
+        const parsed = JSON.parse(errorBody);
+        errorMsg = parsed?.error?.message || errorMsg;
+      } catch {
+        // ignore
+      }
+      logger.error('[Agnes] 图像生成失败:', errorMsg);
+      throw new Error(errorMsg);
+    }
+
+    const data = await response.json();
+    logger.info('[Agnes] 图像生成响应:', JSON.stringify(data).slice(0, 500));
+
+    const imageData = data?.data?.[0];
+    if (!imageData) {
+      logger.error('[Agnes] 图像生成: API 未返回图片数据', JSON.stringify(data).slice(0, 300));
+      throw new Error('API 未返回图片数据');
+    }
+    
+    let imageUrl: string;
+    if (imageData.url) {
+      imageUrl = imageData.url;
+    } else if (imageData.b64_json) {
+      // 将Base64数据转换为data URL，以便于显示和下载
+      imageUrl = `data:image/png;base64,${imageData.b64_json}`;
+    } else {
+      logger.error('[Agnes] 图像生成: API 未返回图片URL或Base64数据', JSON.stringify(data).slice(0, 300));
+      throw new Error('API 未返回图片URL或Base64数据');
+    }
+
+    return {
+      id: generateId(),
+      prompt,
+      url: imageUrl,
+      revisedPrompt: imageData.revised_prompt,
+      timestamp: Date.now(),
+      params: mergedParams,
+    };
   }
 
-  logger.info('[Agnes] 图像生成请求:', { prompt: prompt.slice(0, 80), size: mergedParams.size, n: mergedParams.n });
+  // 多张生成：并发请求
+  const results = await Promise.allSettled(
+    Array.from({ length: n }, () =>
+      fetch(`${BASE_URL}/images/generations`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal,
+      }).then(async (response) => {
+        if (!response.ok) {
+          const errorBody = await response.text().catch(() => '');
+          let errorMsg = `图像生成失败 (${response.status})`;
+          try {
+            const parsed = JSON.parse(errorBody);
+            errorMsg = parsed?.error?.message || errorMsg;
+          } catch {
+            // ignore
+          }
+          throw new Error(errorMsg);
+        }
+        const data = await response.json();
+        const imageData = data?.data?.[0];
+        if (!imageData) throw new Error('API 未返回图片数据');
+        
+        let imageUrl: string;
+        if (imageData.url) {
+          imageUrl = imageData.url;
+        } else if (imageData.b64_json) {
+          imageUrl = `data:image/png;base64,${imageData.b64_json}`;
+        } else {
+          throw new Error('API 未返回图片URL或Base64数据');
+        }
+        
+        return {
+          id: generateId(),
+          prompt,
+          url: imageUrl,
+          revisedPrompt: imageData.revised_prompt,
+          timestamp: Date.now(),
+          params: mergedParams,
+        } as IImageResult;
+      }),
+    ),
+  );
 
-  const response = await fetch(`${BASE_URL}/images/generations`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-    signal,
-  });
+  const succeeded = results
+    .filter((r): r is PromiseFulfilledResult<IImageResult> => r.status === 'fulfilled')
+    .map((r) => r.value);
 
-  if (!response.ok) {
-    const errorBody = await response.text().catch(() => '');
-    let errorMsg = `图像生成失败 (${response.status})`;
-    try {
-      const parsed = JSON.parse(errorBody);
-      errorMsg = parsed?.error?.message || errorMsg;
-    } catch {
-      // ignore
-    }
-    logger.error('[Agnes] 图像生成失败:', errorMsg);
+  if (succeeded.length === 0) {
+    const firstError = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+    const errorMsg = firstError?.reason instanceof Error ? firstError.reason.message : '图像生成失败';
+    logger.error('[Agnes] 图像生成全部失败:', errorMsg);
     throw new Error(errorMsg);
   }
 
-  const data = await response.json();
-  logger.info('[Agnes] 图像生成响应:', JSON.stringify(data).slice(0, 500));
-
-  const imageUrl = data?.data?.[0]?.url ?? data?.data?.[0]?.b64_json;
-  if (!imageUrl) {
-    logger.error('[Agnes] 图像生成: API 未返回图片数据', JSON.stringify(data).slice(0, 300));
-    throw new Error('API 未返回图片数据');
+  if (succeeded.length < n) {
+    logger.warn(`[Agnes] 图像生成部分失败: ${succeeded.length}/${n}`);
+    toast.warning(`${succeeded.length}/${n} 张图片生成成功`);
   }
 
-  return {
-    id: generateId(),
-    prompt,
-    url: imageUrl,
-    revisedPrompt: data?.data?.[0]?.revised_prompt,
-    timestamp: Date.now(),
-    params: mergedParams,
-  };
+  // 返回第一张作为主结果，其余通过 side effect 告知调用方
+  // 调用方可检查 succeeded 数组获取全部结果
+  const primary = succeeded[0];
+  // 附加所有结果到主结果上，便于页面处理
+  (primary as IImageResult & { _allResults?: IImageResult[] })._allResults = succeeded;
+
+  return primary;
 }
 
 // ---------------------------------------------------------------------------
@@ -284,8 +366,8 @@ const VIDEO_POLL_INTERVAL = 3_000;
 
 /**
  * 生成视频 — 异步任务模式。
- * 1. POST /video/generations 提交任务，获取 task_id
- * 2. 轮询 GET /video/generations/{task_id} 直到 status=completed 或 failed
+ * 1. POST /videos 提交任务，获取 video_id + task_id
+ * 2. 轮询 GET /agnesapi?video_id=<VIDEO_ID> 直到 status=completed 或 failed
  * 3. 返回视频 URL
  *
  * @param prompt     视频描述文本
@@ -302,27 +384,32 @@ export async function generateVideo(
   const headers = getAuthHeaders();
 
   const mergedParams: IVideoGenParams = {
-    resolution: params?.resolution ?? '720p',
-    duration: params?.duration ?? 5,
-    motionStrength: params?.motionStrength ?? 'medium',
-    fps: params?.fps ?? 24,
+    width: params?.width ?? 1152,
+    height: params?.height ?? 768,
+    numFrames: params?.numFrames ?? 121,
+    frameRate: params?.frameRate ?? 24,
     ...(params?.seed !== undefined && params.seed !== null ? { seed: params.seed } : {}),
+    ...(params?.negativePrompt ? { negativePrompt: params.negativePrompt } : {}),
   };
 
+  // 构建符合 api-video.md 契约的请求体
   const body: Record<string, unknown> = {
     model: 'agnes-video-v2.0',
     prompt,
-    resolution: mergedParams.resolution,
-    duration: mergedParams.duration,
-    motion_strength: mergedParams.motionStrength,
-    fps: mergedParams.fps,
+    width: mergedParams.width,
+    height: mergedParams.height,
+    num_frames: mergedParams.numFrames,
+    frame_rate: mergedParams.frameRate,
   };
 
   if (mergedParams.seed !== undefined) {
     body.seed = mergedParams.seed;
   }
+  if (mergedParams.negativePrompt) {
+    body.negative_prompt = mergedParams.negativePrompt;
+  }
 
-  logger.info('[Agnes] 视频生成请求:', { prompt: prompt.slice(0, 80), resolution: mergedParams.resolution, duration: mergedParams.duration });
+  logger.info('[Agnes] 视频生成请求:', { prompt: prompt.slice(0, 80), width: mergedParams.width, height: mergedParams.height, numFrames: mergedParams.numFrames, frameRate: mergedParams.frameRate });
 
   const timeoutController = new AbortController();
   const timeoutId = setTimeout(() => timeoutController.abort(), VIDEO_TIMEOUT);
@@ -332,8 +419,8 @@ export async function generateVideo(
     : timeoutController.signal;
 
   try {
-    // Step 1: 提交任务
-    const createResponse = await fetch(`${BASE_URL}/video/generations`, {
+    // Step 1: 提交任务 — 使用契约端点 POST /videos
+    const createResponse = await fetch(`${BASE_URL}/videos`, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
@@ -356,8 +443,11 @@ export async function generateVideo(
     const createData = await createResponse.json();
     logger.info('[Agnes] 视频任务已提交:', JSON.stringify(createData).slice(0, 800));
 
+    // 优先使用 video_id（契约推荐），回退到 task_id
+    const videoId: string | undefined = createData?.video_id;
     const taskId: string | undefined = createData?.task_id ?? createData?.id;
-    if (!taskId) {
+
+    if (!videoId && !taskId) {
       // 同步返回（兼容旧版 API 直接返回 URL）
       const videoUrl: string | undefined =
         createData?.data?.[0]?.url ??
@@ -366,7 +456,7 @@ export async function generateVideo(
         createData?.data?.url ??
         createData?.video_url;
       if (!videoUrl) {
-        logger.error('[Agnes] 视频生成: API 未返回 task_id 或视频 URL', JSON.stringify(createData).slice(0, 500));
+        logger.error('[Agnes] 视频生成: API 未返回 video_id/task_id 或视频 URL', JSON.stringify(createData).slice(0, 500));
         throw new Error('API 未返回任务 ID 或视频 URL');
       }
       return {
@@ -396,9 +486,23 @@ export async function generateVideo(
         combinedSignal.addEventListener('abort', onAbort, { once: true });
       });
 
-      const pollResponse = await fetch(`${BASE_URL}/video/generations/${taskId}`, {
+      // 优先使用 video_id 查询（契约推荐端点），回退到 task_id
+      let pollUrl: string;
+      let pollHeaders: Record<string, string>;
+
+      if (videoId) {
+        // 契约推荐: GET /agnesapi?video_id=<VIDEO_ID>
+        pollUrl = `https://apihub.agnes-ai.com/agnesapi?video_id=${encodeURIComponent(videoId)}`;
+        pollHeaders = { Authorization: headers.Authorization };
+      } else {
+        // 兼容旧版: GET /v1/videos/{task_id}
+        pollUrl = `${BASE_URL}/videos/${encodeURIComponent(taskId!)}`;
+        pollHeaders = headers;
+      }
+
+      const pollResponse = await fetch(pollUrl, {
         method: 'GET',
-        headers,
+        headers: pollHeaders,
         signal: combinedSignal,
       });
 
@@ -412,11 +516,13 @@ export async function generateVideo(
       const status: string = pollData?.status ?? '';
       const progress: number = typeof pollData?.progress === 'number' ? pollData.progress : 0;
 
-      logger.info('[Agnes] 视频任务状态:', { taskId, status, progress, elapsed: `${((Date.now() - startTime) / 1000).toFixed(0)}s` });
+      logger.info('[Agnes] 视频任务状态:', { videoId: videoId ?? 'N/A', taskId: taskId ?? 'N/A', status, progress, elapsed: `${((Date.now() - startTime) / 1000).toFixed(0)}s` });
       onProgress?.(progress, status);
 
       if (status === 'completed') {
+        // 契约: 视频URL在 remixed_from_video_id 字段
         const videoUrl: string | undefined =
+          pollData?.remixed_from_video_id ??
           pollData?.data?.[0]?.url ??
           pollData?.output?.url ??
           pollData?.url ??
@@ -429,13 +535,13 @@ export async function generateVideo(
           throw new Error('视频任务已完成，但未返回视频 URL');
         }
 
-        logger.info('[Agnes] 视频生成完成:', { taskId, url: videoUrl.slice(0, 80) });
+        logger.info('[Agnes] 视频生成完成:', { videoId: videoId ?? taskId, url: videoUrl.slice(0, 80) });
         return {
           id: generateId(),
           prompt,
           url: videoUrl,
           timestamp: Date.now(),
-          taskId,
+          taskId: taskId ?? videoId,
           params: mergedParams,
         };
       }
