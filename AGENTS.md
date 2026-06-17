@@ -3,7 +3,7 @@
 ## 产品概述
 
 - **产品类型**: AI 能力演示平台（工具类应用）
-- **场景类型**: <scene_type>prototype-app</scene_type>
+- **场景类型**: \<scene\_type>prototype-app\</scene\_type>
 - **目标用户**: 对 Agnes AI 模型能力感兴趣的开发者、产品经理、技术决策者，希望通过在线体验快速了解模型效果
 - **核心价值**: 提供一站式 Agnes AI 三大核心模型（文本/图像/视频）的在线演示体验，降低试用门槛
 - **界面语言**: 中文
@@ -11,24 +11,25 @@
 - **导航模式**: 路径导航（多页面系统，功能模块独立）
 - **导航布局**: Sidebar（内部工具/中后台风格，功能模块切换）
 
----
+***
 
 ## 页面结构总览
 
 > **说明**：此表为页面生成的唯一数据源，包含所有页面（一级+二级）
 
-| 页面名称 | 文件名 | 路由 | 页面类型 | 入口来源 |
-|---------|-------|------|---------|---------|
-| 首页/模型介绍 | `HomePage.tsx` | `/` | 一级 | 导航 |
-| 文本聊天 | `ChatPage.tsx` | `/chat` | 一级 | 导航 |
-| 图像生成 | `ImageGenPage.tsx` | `/image-gen` | 一级 | 导航 |
-| 视频生成 | `VideoGenPage.tsx` | `/video-gen` | 一级 | 导航 |
+| 页面名称      | 文件名             | 路由         | 页面类型 | 入口来源 |
+| ------------- | ------------------ | ------------ | -------- | -------- |
+| 首页/模型介绍 | `HomePage.tsx`     | `/`          | 一级     | 导航     |
+| 文本聊天      | `ChatPage.tsx`     | `/chat`      | 一级     | 导航     |
+| 图像生成      | `ImageGenPage.tsx` | `/image-gen` | 一级     | 导航     |
+| 视频生成      | `VideoGenPage.tsx` | `/video-gen` | 一级     | 导航     |
 
 > **页面类型说明**：
+>
 > - **一级页面**：出现在导航中，用户可直接访问
 > - 本项目无二级页面，所有功能模块均为一级页面
 
----
+***
 
 ## 页面布局建议
 
@@ -40,37 +41,37 @@
   - **视频生成页**: 视频播放器（含下载按钮），初始态为空状态提示"输入描述文本开始生成视频"
 - **源材料承载区**: 无（输入仅为文本 prompt，不需要持续参照原始材料）
 
----
+***
 
 ## 导航配置
 
 - **导航布局**: Sidebar（左侧固定，深色主题）
 - **导航项**（仅一级页面）:
 
-| 导航文字 | 路由 | 图标(可选) |
-|---------|------|-----------|
-| 🏠 首页 | `/` | Home |
-| 📝 文本聊天 | `/chat` | MessageSquare |
-| 🎨 图像生成 | `/image-gen` | Image |
-| 🎬 视频生成 | `/video-gen` | Video |
+| 导航文字   | 路由         | 图标(可选)    |
+| ---------- | ------------ | ------------- |
+| 🏠 首页     | `/`          | Home          |
+| 📝 文本聊天 | `/chat`      | MessageSquare |
+| 🎨 图像生成 | `/image-gen` | Image         |
+| 🎬 视频生成 | `/video-gen` | Video         |
 
----
+***
 
 ## 数据来源声明
 
-| 数据/操作 | 来源类型 | 实现要求 | mock 兜底 |
-|---|---|---|---|
-| API Token 配置 | local-persist | localStorage key=`__agnes_demo_token`，读取/保存用户输入的 API Key | 无（首次使用为空，引导用户输入） |
-| 文本聊天（发送消息、流式接收回复） | real-api | 调用 `https://apihub.agnes-ai.com/v1/chat/completions`，model=`Agnes-2.0-Flash`，stream=true，使用 OpenAI 兼容格式 | 无（API 不可用时 toast 提示"请检查 API Token 和网络连接"） |
-| 图像生成（提交 prompt、获取图片） | real-api | 调用 `https://apihub.agnes-ai.com/v1/images/generations`，model=`Agnes-Image-2.1-Flash`，使用 OpenAI 兼容格式 | 无（API 不可用时 toast 提示"图像生成失败，请检查 Token"） |
-| 视频生成（提交文本、获取视频） | real-api | 调用 `https://apihub.agnes-ai.com/v1/video/generations`，model=`Agnes-Video-V2.0`，使用 OpenAI 兼容格式 | 无（API 不可用时 toast 提示"视频生成失败，请检查 Token"） |
-| 对话历史（文本聊天） | local-persist | localStorage key=`__agnes_demo_chat_history`，保存当前会话的消息列表，页面刷新后恢复 | 无（首次使用为空数组） |
-| 生成的图片/视频下载 | import-export | 图片：fetch → Blob → `URL.createObjectURL` + `<a>` click 触发下载；视频同理 | 无 |
-| 首页模型能力介绍 | demo-mock | 静态内容，直接硬编码在 `HomePage.tsx` 中 | ✅ 本身就是 mock |
+| 数据/操作                          | 来源类型      | 实现要求                                                                                                           | mock 兜底                                                  |
+| ---------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- |
+| API Token 配置                     | local-persist | localStorage key=`__agnes_demo_token`，读取/保存用户输入的 API Key                                                 | 无（首次使用为空，引导用户输入）                           |
+| 文本聊天（发送消息、流式接收回复） | real-api      | 调用 `https://apihub.agnes-ai.com/v1/chat/completions`，model=`Agnes-2.0-Flash`，stream=true，使用 OpenAI 兼容格式 | 无（API 不可用时 toast 提示"请检查 API Token 和网络连接"） |
+| 图像生成（提交 prompt、获取图片）  | real-api      | 调用 `https://apihub.agnes-ai.com/v1/images/generations`，model=`Agnes-Image-2.1-Flash`，使用 OpenAI 兼容格式      | 无（API 不可用时 toast 提示"图像生成失败，请检查 Token"）  |
+| 视频生成（提交文本、获取视频）     | real-api      | 调用 `https://apihub.agnes-ai.com/v1/video/generations`，model=`Agnes-Video-V2.0`，使用 OpenAI 兼容格式            | 无（API 不可用时 toast 提示"视频生成失败，请检查 Token"）  |
+| 对话历史（文本聊天）               | local-persist | localStorage key=`__agnes_demo_chat_history`，保存当前会话的消息列表，页面刷新后恢复                               | 无（首次使用为空数组）                                     |
+| 生成的图片/视频下载                | import-export | 图片：fetch → Blob → `URL.createObjectURL` + `<a>` click 触发下载；视频同理                                        | 无                                                         |
+| 首页模型能力介绍                   | demo-mock     | 静态内容，直接硬编码在 `HomePage.tsx` 中                                                                           | ✅ 本身就是 mock                                            |
 
 > **说明**：文本聊天、图像生成、视频生成均为真实 API 调用，依赖用户提供的 API Token。Token 未配置时，各功能页应引导用户先配置 Token（提供跳转设置面板的入口）。
 
----
+***
 
 ## 功能列表
 
@@ -85,7 +86,7 @@
   - **Token 清除**: 提供"清除 Token"按钮，确认后删除 localStorage 中的 Token，toast 提示"Token 已清除"
   - **Token 状态指示**: 在全局 UI（如 Sidebar 底部）显示 Token 配置状态图标（绿色圆点=已配置，红色圆点=未配置），点击可打开设置面板
 
----
+***
 
 ### 页面: 首页/模型介绍 (`/`)
 
@@ -99,7 +100,7 @@
   - **卡片交互**: 每张卡片包含"立即体验"按钮，点击跳转到对应功能页（`/chat`、`/image-gen`、`/video-gen`）
   - **Token 状态提示**: 若 Token 未配置，在首页顶部显示友好提示条"👋 请先配置 API Token 以开始体验"，点击可打开设置面板
 
----
+***
 
 ### 页面: 文本聊天 (`/chat`)
 
@@ -112,7 +113,7 @@
   - **Token 未配置引导**: 若 Token 未配置，输入框禁用，显示提示"请先配置 API Token"，点击可打开设置面板
   - **错误处理**: API 调用失败时，在对话列表中显示错误消息气泡（红色提示），不中断对话流程
 
----
+***
 
 ### 页面: 图像生成 (`/image-gen`)
 
@@ -126,7 +127,7 @@
   - **Token 未配置引导**: 若 Token 未配置，输入框禁用，显示提示"请先配置 API Token"
   - **错误处理**: 生成失败时 toast 提示具体错误信息，输入框保持可用状态
 
----
+***
 
 ### 页面: 视频生成 (`/video-gen`)
 
@@ -140,14 +141,14 @@
   - **Token 未配置引导**: 若 Token 未配置，输入框禁用，显示提示"请先配置 API Token"
   - **错误处理**: 生成失败时 toast 提示具体错误信息，输入框保持可用状态
 
----
+***
 
 ## 数据共享配置
 
-| 存储键名 | 数据说明 | 使用页面 |
-|---------|---------|---------|
-| `__agnes_demo_token` | 用户保存的 Agnes AI API Key，类型 `string` | 全局（所有 API 调用页面） |
-| `__agnes_demo_chat_history` | 文本聊天对话历史，类型 `IChatMessage[]` | 文本聊天页 |
+| 存储键名                    | 数据说明                                   | 使用页面                  |
+| --------------------------- | ------------------------------------------ | ------------------------- |
+| `__agnes_demo_token`        | 用户保存的 Agnes AI API Key，类型 `string` | 全局（所有 API 调用页面） |
+| `__agnes_demo_chat_history` | 文本聊天对话历史，类型 `IChatMessage[]`    | 文本聊天页                |
 
 ```ts
 interface IChatMessage {
@@ -160,7 +161,27 @@ interface IChatMessage {
   /** 消息时间戳 */
   timestamp: number;
 }
+```
 
--------
+---
 
-设计规范文档生成失败
+## 接口规范契约
+
+所有 Agnes AI API 调用**严格遵循** `.agents/` 目录下按接口类型拆分的官方接入文档，不得偏离：
+
+| 接口类型     | 文档路径                                       | 模型名称                | API 端点                                            |
+| ------------ | ---------------------------------------------- | ----------------------- | --------------------------------------------------- |
+| 对话与多模态 | [`.agents/api-chat.md`](.agents/api-chat.md)   | `agnes-2.0-flash`       | `https://apihub.agnes-ai.com/v1/chat/completions`   |
+| 图像生成     | [`.agents/api-image.md`](.agents/api-image.md) | `agnes-image-2.1-flash` | `https://apihub.agnes-ai.com/v1/images/generations` |
+| 视频生成     | [`.agents/api-video.md`](.agents/api-video.md) | `agnes-video-v2.0`      | `https://apihub.agnes-ai.com/v1/videos`             |
+
+### 契约要点
+
+1. **模型名称**：必须使用文档中指定的模型名称（`agnes-2.0-flash` / `agnes-image-2.1-flash` / `agnes-video-v2.0`），不得使用其他值。
+2. **认证方式**：统一 Bearer Token，请求头 `Authorization: Bearer YOUR_API_KEY`。
+3. **请求参数**：必填/选填、类型、取值范围严格按文档执行，不得自行增减参数。
+4. **响应处理**：按文档定义的字段结构解析响应，不得假设未文档化的字段存在。
+5. **图像接口特殊规则**：`response_format` 必须放在 `extra_body` 内部，不得放在请求体顶层；文生图 Base64 用顶层 `return_base64`，图生图 Base64 用 `extra_body.response_format: "b64_json"`。
+6. **视频接口特殊规则**：视频生成为异步流程（创建任务 → 轮询结果）；优先使用 `video_id` 查询结果；`num_frames` 须 ≤ 441 且遵循 `8n+1` 规则；宽高参数会被自动标准化，以响应中的 `size`/`seconds` 为准。
+7. **流式输出**：对话接口启用 `stream: true` 时，按 SSE 协议解析，以 `data: [DONE]` 为结束标记。
+
