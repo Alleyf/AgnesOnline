@@ -1,5 +1,12 @@
 # 项目技术规范
 
+## 一键部署
+
+### Vercel
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FAlleyf%2FAgnesOnline)
+
+
 ## 技术栈
 
 - 前端: React 19 + TypeScript
