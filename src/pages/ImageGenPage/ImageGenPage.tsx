@@ -17,6 +17,7 @@ import {
   ChevronUp,
   SlidersHorizontal,
   Loader2,
+  Copy,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -138,17 +139,16 @@ function HistoryItem({
   onDelete: () => void;
 }) {
   return (
-    <motion.button
+    <motion.div
       layout
       initial={{ opacity: 0, x: -12 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -12 }}
       onClick={onSelect}
-      className={`group relative w-full flex items-center gap-3 rounded-lg p-2.5 text-left transition-colors ${
-        isActive
+      className={`group relative w-full flex items-center gap-3 rounded-lg p-2.5 text-left cursor-pointer transition-colors ${isActive
           ? 'bg-primary/10 border border-primary/30'
           : 'border border-transparent hover:bg-muted/50'
-      }`}
+        }`}
     >
       <div className="size-12 shrink-0 overflow-hidden rounded-lg bg-muted">
         <UIImage src={record.url} alt={record.prompt} className="size-full object-cover" />
@@ -176,7 +176,7 @@ function HistoryItem({
       >
         <X className="size-3.5" />
       </Button>
-    </motion.button>
+    </motion.div>
   );
 }
 
@@ -433,18 +433,29 @@ export default function ImageGenPage() {
 
       try {
         const result = await generateImage(trimmed, controller.signal, params);
-        setHistory((prev) => [result, ...prev]);
-        setActiveId(result.id);
+        // 处理多图结果：_allResults 包含并发请求的所有成功图片
+        const allResults = (result as IImageResult & { _allResults?: IImageResult[] })._allResults;
+        if (allResults && allResults.length > 1) {
+          setHistory((prev) => [...allResults.reverse(), ...prev]);
+          setActiveId(allResults[0].id);
+          toast.success(`${allResults.length} 张图片生成成功`);
+        } else {
+          setHistory((prev) => [result, ...prev]);
+          setActiveId(result.id);
+          toast.success('图片生成成功');
+        }
         setPrompt('');
-        // 资产入库
-        addAsset({
-          id: result.id,
-          type: 'image',
-          prompt: result.prompt,
-          url: result.url,
-          timestamp: result.timestamp,
-        });
-        toast.success('图片生成成功');
+        // 资产入库：所有成功图片都入库
+        const resultsToStore = allResults && allResults.length > 1 ? allResults : [result];
+        for (const r of resultsToStore) {
+          addAsset({
+            id: r.id,
+            type: 'image',
+            prompt: r.prompt,
+            url: r.url,
+            timestamp: r.timestamp,
+          });
+        }
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
           toast.info('已取消生成');
@@ -467,7 +478,7 @@ export default function ImageGenPage() {
   const handleDownload = useCallback(
     async (url: string, id: string) => {
       try {
-        const response = await fetch(url);
+        const response = await fetch(url, { mode: 'cors' });
         const blob = await response.blob();
         const objectUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -479,7 +490,90 @@ export default function ImageGenPage() {
         URL.revokeObjectURL(objectUrl);
         toast.success('下载已开始');
       } catch {
-        toast.error('下载失败，请重试');
+        // 跨域 fetch 失败时，通过 canvas 中转下载
+        try {
+          const img = document.createElement('img');
+          img.crossOrigin = 'anonymous';
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) { toast.error('下载失败'); return; }
+            ctx.drawImage(img, 0, 0);
+            canvas.toBlob((b) => {
+              if (!b) { toast.error('下载失败'); return; }
+              const objectUrl = URL.createObjectURL(b);
+              const a = document.createElement('a');
+              a.href = objectUrl;
+              a.download = `agnes-image-${id}.png`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(objectUrl);
+              toast.success('下载已开始');
+            }, 'image/png');
+          };
+          img.onerror = () => toast.error('下载失败，请重试');
+          img.src = url;
+        } catch {
+          toast.error('下载失败，请重试');
+        }
+      }
+    },
+    [],
+  );
+
+  const handleCopyImage = useCallback(
+    async (url: string) => {
+      try {
+        // 1. data URL 直接转 blob
+        if (url.startsWith('data:')) {
+          const res = await fetch(url);
+          const blob = await res.blob();
+          await navigator.clipboard.write([
+            new ClipboardItem({ [blob.type]: blob }),
+          ]);
+          toast.success('图片已复制到剪贴板');
+          return;
+        }
+
+        // 2. 尝试 fetch（同源或允许 CORS 的远程图片）
+        try {
+          const response = await fetch(url, { mode: 'cors' });
+          const blob = await response.blob();
+          const pngBlob = blob.type.startsWith('image/') ? blob : new Blob([blob], { type: 'image/png' });
+          await navigator.clipboard.write([
+            new ClipboardItem({ [pngBlob.type]: pngBlob }),
+          ]);
+          toast.success('图片已复制到剪贴板');
+          return;
+        } catch {
+          // fetch 失败，继续尝试 canvas 方案
+        }
+
+        // 3. 通过 img + canvas 绕过 CORS
+        const img = document.createElement('img');
+        img.crossOrigin = 'anonymous';
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = () => reject(new Error('Image load failed'));
+          img.src = url;
+        });
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('Canvas context failed');
+        ctx.drawImage(img, 0, 0);
+        const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/png'));
+        if (!blob) throw new Error('toBlob failed');
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': blob }),
+        ]);
+        toast.success('图片已复制到剪贴板');
+      } catch {
+        toast.error('复制图片失败，请尝试下载后手动粘贴');
       }
     },
     [],
@@ -701,6 +795,15 @@ export default function ImageGenPage() {
                               size="icon"
                               variant="secondary"
                               className="h-8 w-8 rounded-lg shadow-md"
+                              onClick={() => handleCopyImage(activeRecord.url)}
+                              aria-label="复制图片"
+                            >
+                              <Copy className="size-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="secondary"
+                              className="h-8 w-8 rounded-lg shadow-md"
                               onClick={() => handleDownload(activeRecord.url, activeRecord.id)}
                               aria-label="下载图片"
                             >
@@ -717,6 +820,15 @@ export default function ImageGenPage() {
                               aria-label="放大预览"
                             >
                               <Maximize2 className="size-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="secondary"
+                              className="h-8 w-8 rounded-lg shadow-md"
+                              onClick={() => handleCopyImage(activeRecord.url)}
+                              aria-label="复制图片"
+                            >
+                              <Copy className="size-4" />
                             </Button>
                             <Button
                               size="icon"
@@ -767,7 +879,7 @@ export default function ImageGenPage() {
                     开始创作
                   </h3>
                   <p className="text-sm text-muted-foreground/60 mt-1.5 max-w-sm">
-                     在上方输入图片描述，agnes-image-2.1-flash 将为你生成高质量图片
+                    在上方输入图片描述，agnes-image-2.1-flash 将为你生成高质量图片
                   </p>
                   {!tokenConfigured && (
                     <Button

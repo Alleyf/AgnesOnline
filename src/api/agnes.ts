@@ -80,6 +80,15 @@ export function getToken(): string | null {
   }
 }
 
+/** 将字符串编码为 ISO-8859-1 安全格式：对超出 Latin-1 范围的字符进行 percent-encoding */
+function toLatin1Safe(str: string): string {
+  return str.replace(/[^\x00-\xff]/g, (ch) =>
+    Array.from(new TextEncoder().encode(ch))
+      .map((b) => `%${b.toString(16).padStart(2, '0').toUpperCase()}`)
+      .join(''),
+  );
+}
+
 export function setToken(token: string): void {
   try {
     scopedStorage.setItem(TOKEN_KEY, token);
@@ -112,7 +121,7 @@ function getAuthHeaders(): Record<string, string> {
   }
   return {
     'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
+    Authorization: `Bearer ${toLatin1Safe(token)}`,
   };
 }
 
@@ -215,12 +224,13 @@ export async function generateImage(
 
   // 构建符合 api-image.md 契约的请求体
   // n 不作为 API 参数传递，通过并发请求实现多张生成
+  // 使用 b64_json 避免 CORS 问题（远程 URL 无法跨域 fetch/复制/下载）
   const body: Record<string, unknown> = {
     model: 'agnes-image-2.1-flash',
     prompt,
     size: mergedParams.size,
     extra_body: {
-      response_format: 'url',
+      response_format: 'b64_json',
     },
   };
 
@@ -264,11 +274,10 @@ export async function generateImage(
     }
     
     let imageUrl: string;
-    if (imageData.url) {
-      imageUrl = imageData.url;
-    } else if (imageData.b64_json) {
-      // 将Base64数据转换为data URL，以便于显示和下载
+    if (imageData.b64_json) {
       imageUrl = `data:image/png;base64,${imageData.b64_json}`;
+    } else if (imageData.url) {
+      imageUrl = imageData.url;
     } else {
       logger.error('[Agnes] 图像生成: API 未返回图片URL或Base64数据', JSON.stringify(data).slice(0, 300));
       throw new Error('API 未返回图片URL或Base64数据');
@@ -309,10 +318,10 @@ export async function generateImage(
         if (!imageData) throw new Error('API 未返回图片数据');
         
         let imageUrl: string;
-        if (imageData.url) {
-          imageUrl = imageData.url;
-        } else if (imageData.b64_json) {
+        if (imageData.b64_json) {
           imageUrl = `data:image/png;base64,${imageData.b64_json}`;
+        } else if (imageData.url) {
+          imageUrl = imageData.url;
         } else {
           throw new Error('API 未返回图片URL或Base64数据');
         }
@@ -362,7 +371,13 @@ export async function generateImage(
 const VIDEO_TIMEOUT = 300_000;
 
 /** 轮询间隔 (ms) */
-const VIDEO_POLL_INTERVAL = 3_000;
+const VIDEO_POLL_INTERVAL = 5_000;
+
+/** 429 退避轮询间隔 (ms) */
+const VIDEO_POLL_INTERVAL_BACKOFF = 15_000;
+
+/** 最大连续 429 重试次数 */
+const VIDEO_MAX_429_RETRIES = 5;
 
 /**
  * 生成视频 — 异步任务模式。
@@ -471,14 +486,20 @@ export async function generateVideo(
     // Step 2: 轮询任务状态
     onProgress?.(0, 'queued');
     const startTime = Date.now();
+    let rateLimitRetries = 0;
 
     while (true) {
       if (combinedSignal.aborted) {
         throw new DOMException('Aborted', 'AbortError');
       }
 
+      // 根据是否在退避状态选择轮询间隔
+      const currentInterval = rateLimitRetries > 0
+        ? VIDEO_POLL_INTERVAL_BACKOFF
+        : VIDEO_POLL_INTERVAL;
+
       await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(resolve, VIDEO_POLL_INTERVAL);
+        const timer = setTimeout(resolve, currentInterval);
         const onAbort = () => {
           clearTimeout(timer);
           reject(new DOMException('Aborted', 'AbortError'));
@@ -507,10 +528,24 @@ export async function generateVideo(
       });
 
       if (!pollResponse.ok) {
+        // 429 限流：退避重试，不直接抛出异常
+        if (pollResponse.status === 429) {
+          rateLimitRetries++;
+          if (rateLimitRetries > VIDEO_MAX_429_RETRIES) {
+            logger.error('[Agnes] 视频任务查询 429 重试次数已用尽');
+            throw new Error('查询任务状态失败：请求频率过高，请稍后重试');
+          }
+          logger.warn(`[Agnes] 视频任务查询 429 限流，第 ${rateLimitRetries} 次退避重试，间隔 ${VIDEO_POLL_INTERVAL_BACKOFF / 1000}s`);
+          continue;
+        }
+
         const errorBody = await pollResponse.text().catch(() => '');
         logger.error('[Agnes] 视频任务查询失败:', errorBody);
         throw new Error(`查询任务状态失败 (${pollResponse.status})`);
       }
+
+      // 成功请求后重置限流计数
+      rateLimitRetries = 0;
 
       const pollData = await pollResponse.json();
       const status: string = pollData?.status ?? '';

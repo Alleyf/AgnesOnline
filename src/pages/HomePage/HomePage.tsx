@@ -23,9 +23,6 @@ import TokenSettingsPanel from '@/components/TokenSettingsPanel';
 import { useAgnesToken } from '@/hooks/useAgnesToken';
 import AgnesLogo from '@/components/AgnesLogo';
 
-const HERO_IMAGE =
-  '/spark/app/app_4kd66d57wh0f1/runtime/api/v1/storage/object/bucket_aadkggkh6kyku_static/static%2Faadkgfr6c5qew_ve_miaoda';
-
 const CAPABILITY_CARDS = [
   {
     icon: MessageSquare,
@@ -33,8 +30,7 @@ const CAPABILITY_CARDS = [
     subtitle: 'agnes-2.0-flash',
     description:
       '高效语言模型，支持多轮对话、代码生成、文本分析等场景。流式输出，响应迅速，助你快速构建智能对话体验。',
-    image:
-      '/spark/app/app_4kd66d57wh0f1/runtime/api/v1/storage/object/bucket_aadkggkh6kyku_static/static%2Faadkgfr52csjw_ve_miaoda',
+    image: '/langding2.png',
     features: ['多轮对话', '流式输出', '代码理解', '128K 上下文'],
     route: '/chat',
     gradient: 'from-primary/20 via-primary/5 to-transparent',
@@ -46,8 +42,7 @@ const CAPABILITY_CARDS = [
     subtitle: 'agnes-image-2.1-flash',
     description:
       '高性能图像生成模型，文本描述即可创作精美图片。支持多种风格，分辨率高达 1024×1024，创意无限。',
-    image:
-      '/spark/app/app_4kd66d57wh0f1/runtime/api/v1/storage/object/bucket_aadkggkh6kyku_static/static%2Faadkgfscb22dw_ve_miaoda',
+    image: '/langding3.png',
     features: ['文生图', '高分辨率', '多风格', '快速生成'],
     route: '/image-gen',
     gradient: 'from-accent/20 via-accent/5 to-transparent',
@@ -59,8 +54,7 @@ const CAPABILITY_CARDS = [
     subtitle: 'agnes-video-v2.0',
     description:
       '电影级视频生成模型，文本描述即可创作高质量视频内容。支持多种画幅比例，画面流畅自然。',
-    image:
-      '/spark/app/app_4kd66d57wh0f1/runtime/api/v1/storage/object/bucket_aadkggkh6kyku_static/static%2Faadkgf3dcv2bw_ve_miaoda',
+    image: '/lanlangding4.png',
     features: ['文生视频', '电影级画质', '多画幅', '流畅运镜'],
     route: '/video-gen',
     gradient: 'from-chart-3/20 via-chart-3/5 to-transparent',
@@ -200,7 +194,7 @@ function HeroSection() {
             </div>
           </motion.div>
 
-          {/* Hero image */}
+          {/* Hero video */}
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -208,9 +202,12 @@ function HeroSection() {
             className="relative"
           >
             <div className="relative rounded-2xl overflow-hidden border border-border/40 shadow-2xl shadow-primary/10">
-              <Img
-                src={HERO_IMAGE}
-                alt="Agnes AI 神经网络抽象"
+              <video
+                src="/agnesdemo.mp4"
+                autoPlay
+                loop
+                muted
+                playsInline
                 className="w-full aspect-[21/9] object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-background/60 via-transparent to-transparent" />
@@ -327,6 +324,49 @@ function CapabilitiesSection() {
             </motion.div>
           ))}
         </div>
+      </div>
+    </section>
+  );
+}
+
+function DemoVideoSection() {
+  return (
+    <section className="py-20 md:py-28">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-80px' }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          className="text-center mb-10"
+        >
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">
+            看看 Agnes 能做什么
+          </h2>
+          <p className="mt-3 text-muted-foreground max-w-xl mx-auto">
+            从文字描述到精美视频，一键生成创意内容
+          </p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-60px' }}
+          transition={{ duration: 0.7, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
+          className="relative group"
+        >
+          <div className="rounded-2xl overflow-hidden border border-border/40 shadow-2xl shadow-primary/5 bg-card">
+            <video
+              src="/agnesdemo.mp4"
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="w-full aspect-video object-cover"
+            />
+          </div>
+          <div className="absolute -inset-6 bg-gradient-to-r from-primary/10 via-accent/5 to-chart-3/10 rounded-3xl blur-3xl -z-10 opacity-40 group-hover:opacity-60 transition-opacity duration-700" />
+        </motion.div>
       </div>
     </section>
   );

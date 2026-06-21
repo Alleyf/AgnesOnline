@@ -124,11 +124,10 @@ function AssetCard({
       className="group relative"
     >
       <Card
-        className={`overflow-hidden border transition-all duration-200 cursor-pointer h-full flex flex-col ${
-          selected
+        className={`overflow-hidden border transition-all duration-200 cursor-pointer h-full flex flex-col ${selected
             ? 'border-primary ring-2 ring-primary/30'
             : 'border-border/40 hover:border-border/60'
-        }`}
+          }`}
         onClick={() => onPreview(asset)}
       >
         {/* Thumbnail */}
@@ -216,11 +215,10 @@ function AssetCard({
 
           {/* Select checkbox */}
           <button
-            className={`absolute right-2 top-2 z-20 size-6 rounded-md flex items-center justify-center transition-all ${
-              selected
+            className={`absolute right-2 top-2 z-20 size-6 rounded-md flex items-center justify-center transition-all ${selected
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-background/70 text-foreground/50 opacity-0 group-hover:opacity-100 hover:bg-background/90'
-            }`}
+              }`}
             onClick={(e) => {
               e.stopPropagation();
               onToggleSelect(asset.id);
@@ -375,32 +373,71 @@ export default function AssetsPage() {
   );
 
   const handleDownload = useCallback(async (asset: IAssetItem) => {
+    const ext = asset.type === 'image' ? 'png' : 'mp4';
+    const filename = `agnes-${asset.type}-${asset.id}.${ext}`;
+
     try {
-      let blob: Blob;
-      
-      // 检查是否是data URL
+      // data URL 直接转换
       if (asset.url.startsWith('data:')) {
-        // 从data URL创建Blob
-        const response = await fetch(asset.url);
-        blob = await response.blob();
-      } else {
-        // 普通URL，使用fetch获取
-        const response = await fetch(asset.url);
-        blob = await response.blob();
+        const blob = await (await fetch(asset.url)).blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(objectUrl);
+        toast.success('下载已开始');
+        return;
       }
-      
+
+      // 远程 URL：先尝试 fetch + blob
+      const response = await fetch(asset.url, { mode: 'cors' });
+      const blob = await response.blob();
       const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = objectUrl;
-      const ext = asset.type === 'image' ? 'png' : 'mp4';
-      a.download = `agnes-${asset.type}-${asset.id}.${ext}`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(objectUrl);
       toast.success('下载已开始');
     } catch {
-      toast.error('下载失败，请重试');
+      // 跨域 fetch 失败时，通过 canvas 中转（仅图片）
+      if (asset.type === 'image') {
+        try {
+          const img = document.createElement('img');
+          img.crossOrigin = 'anonymous';
+          await new Promise<void>((resolve, reject) => {
+            img.onload = () => resolve();
+            img.onerror = () => reject(new Error('Image load failed'));
+            img.src = asset.url;
+          });
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) { toast.error('下载失败'); return; }
+          ctx.drawImage(img, 0, 0);
+          const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/png'));
+          if (!blob) { toast.error('下载失败'); return; }
+          const objectUrl = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = objectUrl;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(objectUrl);
+          toast.success('下载已开始');
+        } catch {
+          toast.error('下载失败，请重试');
+        }
+      } else {
+        toast.error('下载失败，请重试');
+      }
     }
   }, []);
 

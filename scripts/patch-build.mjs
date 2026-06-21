@@ -12,10 +12,10 @@ if (!fs.existsSync(indexPath)) {
 let html = fs.readFileSync(indexPath, "utf-8");
 
 // Replace lark-apaas template variables with static values for standalone deployment
-html = html.replace(/{{{appName}}}/g, "Agnes AI 在线演示平台");
+html = html.replace(/{Agnes AI 在线演示平台}/g, "Agnes AI 在线演示平台");
 html = html.replace(/{{{appAvatar}}}/g, "./favicon.svg");
 html = html.replace(/{{{appDescription}}}/g, "Agnes AI 三大核心模型（文本/图像/视频）在线演示平台");
-html = html.replace(/{{appName}}/g, "Agnes AI 在线演示平台");
+html = html.replace(/Agnes AI 在线演示平台/g, "Agnes AI 在线演示平台");
 html = html.replace(/{{appAvatar}}/g, "./favicon.svg");
 html = html.replace(/{{appDescription}}/g, "Agnes AI 三大核心模型（文本/图像/视频）在线演示平台");
 html = html.replace(/"{{appId}}"/g, '""');

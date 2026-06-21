@@ -1,5 +1,7 @@
-import { useState, useRef, useEffect, useCallback, type FormEvent, type KeyboardEvent } from 'react';
+import { useState, useRef, useEffect, useCallback, type FormEvent, type KeyboardEvent, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { toast } from 'sonner';
 import { scopedStorage } from '@lark-apaas/client-toolkit-lite';
 import {
@@ -44,6 +46,7 @@ interface IChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;
+  quoteId?: string;
 }
 
 interface IChatSession {
@@ -112,32 +115,117 @@ function autoName(messages: IChatMessage[]): string {
 // Markdown renderer
 // ---------------------------------------------------------------------------
 
-function renderMarkdown(text: string): string {
-  let html = text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-foreground">$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/`([^`]+)`/g, '<code class="px-1.5 py-0.5 rounded bg-muted text-sm font-mono text-accent">$1</code>')
-    .replace(/```(\w*)\n([\s\S]*?)```/g, (_m, _lang, code) => {
-      const escaped = code
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-      return `<pre class="my-3 overflow-x-auto rounded-lg bg-muted/80 p-4 text-sm font-mono leading-relaxed"><code>${escaped}</code></pre>`;
-    })
-    .replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold mt-4 mb-2 text-foreground">$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2 class="text-lg font-semibold mt-5 mb-2 text-foreground">$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1 class="text-xl font-bold mt-6 mb-3 text-foreground">$1</h1>')
-    .replace(/^- (.+)$/gm, '<li class="ml-4 list-disc text-foreground/90">$1</li>')
-    .replace(/^\d+\. (.+)$/gm, '<li class="ml-4 list-decimal text-foreground/90">$1</li>')
-    .replace(/^> (.+)$/gm, '<blockquote class="border-l-2 border-primary/40 pl-4 italic text-muted-foreground my-2">$1</blockquote>')
-    .replace(/^---$/gm, '<hr class="my-4 border-border/40" />')
-    .replace(/\n\n/g, '</p><p class="mb-2 leading-relaxed">')
-    .replace(/\n/g, '<br />');
+/** Markdown 渲染组件 — 使用 react-markdown + remark-gfm */
+function MarkdownContent({ content }: { content: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        h1: ({ children }) => <h1 className="text-xl font-bold mt-6 mb-3 text-foreground">{children}</h1>,
+        h2: ({ children }) => <h2 className="text-lg font-semibold mt-5 mb-2 text-foreground">{children}</h2>,
+        h3: ({ children }) => <h3 className="text-base font-semibold mt-4 mb-2 text-foreground">{children}</h3>,
+        p: ({ children }) => <p className="mb-2 leading-relaxed">{children}</p>,
+        strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+        em: ({ children }) => <em>{children}</em>,
+        code: ({ className, children, ...props }) => {
+          const isInline = !className;
+          if (isInline) {
+            return <code className="px-1.5 py-0.5 rounded bg-muted text-sm font-mono text-accent" {...props}>{children}</code>;
+          }
+          return <code className={className} {...props}>{children}</code>;
+        },
+        pre: ({ children }) => {
+          // 提取代码文本用于复制
+          const codeEl = children as React.ReactElement<{ children?: React.ReactNode; className?: string }>;
+          const codeText = extractTextFromChildren(codeEl?.props?.children);
+          const langClass = codeEl?.props?.className || '';
+          const lang = langClass.replace('language-', '');
 
-  return `<p class="mb-2 leading-relaxed">${html}</p>`;
+          return (
+            <div className="group/mycode relative my-3 rounded-lg bg-muted/80 overflow-hidden">
+              {/* 顶部栏：语言标签 + 复制按钮 */}
+              <div className="flex items-center justify-between px-4 py-1.5 bg-muted/60 border-b border-border/20 text-xs text-muted-foreground">
+                <span>{lang || 'code'}</span>
+                <button
+                  type="button"
+                  className="flex items-center gap-1 hover:text-foreground transition-colors"
+                  onClick={() => {
+                    navigator.clipboard.writeText(codeText).then(
+                      () => toast.success('已复制代码'),
+                      () => toast.error('复制失败'),
+                    );
+                  }}
+                >
+                  <Copy className="size-3" />
+                  复制
+                </button>
+              </div>
+              <pre className="overflow-x-auto p-4 text-sm font-mono leading-relaxed">
+                {children}
+              </pre>
+            </div>
+          );
+        },
+        ul: ({ children }) => <ul className="ml-4 list-disc space-y-1 text-foreground/90 my-2">{children}</ul>,
+        ol: ({ children }) => <ol className="ml-4 list-decimal space-y-1 text-foreground/90 my-2">{children}</ol>,
+        li: ({ children }) => <li>{children}</li>,
+        blockquote: ({ children }) => <blockquote className="border-l-2 border-primary/40 pl-4 italic text-muted-foreground my-2">{children}</blockquote>,
+        hr: () => <hr className="my-4 border-border/40" />,
+        a: ({ href, children }) => (
+          <a href={href} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+            {children}
+          </a>
+        ),
+        table: ({ children }) => (
+          <div className="overflow-x-auto my-3">
+            <table className="w-full text-sm border-collapse border border-border/40">{children}</table>
+          </div>
+        ),
+        thead: ({ children }) => <thead className="bg-muted/50">{children}</thead>,
+        th: ({ children }) => <th className="border border-border/40 px-3 py-2 text-left font-semibold">{children}</th>,
+        td: ({ children }) => <td className="border border-border/40 px-3 py-2">{children}</td>,
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  );
+}
+
+function extractTextFromChildren(children: React.ReactNode): string {
+  if (typeof children === 'string') return children;
+  if (typeof children === 'number') return String(children);
+  if (Array.isArray(children)) return children.map(extractTextFromChildren).join('');
+  if (children && typeof children === 'object' && 'props' in children) {
+    const props = (children as { props?: { children?: React.ReactNode } }).props;
+    return extractTextFromChildren(props?.children);
+  }
+  return '';
+}
+
+/**
+ * 解析消息内容，分离引用块和正文。
+ * 规则：消息开头的连续 `> ` 行为引用块，第一个非 `> ` 行之后的内容为正文。
+ */
+function parseQuotedContent(content: string): { quotedText: string | null; bodyText: string } {
+  const lines = content.split('\n');
+  let quoteEndIndex = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].startsWith('> ')) {
+      quoteEndIndex = i + 1;
+    } else {
+      break;
+    }
+  }
+
+  if (quoteEndIndex === 0) {
+    return { quotedText: null, bodyText: content };
+  }
+
+  const quotedText = lines.slice(0, quoteEndIndex).map((l) => l.slice(2)).join('\n');
+  const bodyText = lines.slice(quoteEndIndex).join('\n').trim();
+
+  return { quotedText, bodyText };
 }
 
 // ---------------------------------------------------------------------------
@@ -267,6 +355,83 @@ function MessageToolbar({
           <TooltipContent side="top" className="text-xs">删除</TooltipContent>
         </Tooltip>
       </TooltipProvider>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Quote preview bar (above input)
+// ---------------------------------------------------------------------------
+
+function QuotePreviewBar({
+  msg,
+  onCancel,
+}: {
+  msg: IChatMessage;
+  onCancel: () => void;
+}) {
+  const isAssistant = msg.role === 'assistant';
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, height: 0, marginTop: 0 }}
+      animate={{ opacity: 1, height: 'auto', marginTop: 8 }}
+      exit={{ opacity: 0, height: 0, marginTop: 0 }}
+      transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+      className="flex items-center gap-2 px-3 py-2 rounded-t-xl bg-muted/40 border border-border/30 border-b-0"
+    >
+      <div
+        className={`w-0.5 h-8 shrink-0 rounded-full ${
+          isAssistant ? 'bg-primary/50' : 'bg-accent/50'
+        }`}
+      />
+      {isAssistant ? (
+        <Bot className="size-3.5 shrink-0 text-muted-foreground" />
+      ) : (
+        <User className="size-3.5 shrink-0 text-muted-foreground" />
+      )}
+      <span className="text-[11px] font-medium text-muted-foreground shrink-0">
+        {isAssistant ? '助手' : '用户'}
+      </span>
+      <span className="flex-1 text-xs text-foreground/70 line-clamp-1 truncate min-w-0">
+        {msg.content}
+      </span>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-5 w-5 shrink-0 rounded-md text-muted-foreground hover:text-foreground"
+        onClick={onCancel}
+        aria-label="取消引用"
+      >
+        <X className="size-3" />
+      </Button>
+    </motion.div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Quote block (inside user message bubble)
+// ---------------------------------------------------------------------------
+
+function QuoteBlock({
+  text,
+  onClick,
+}: {
+  text: string;
+  onClick?: () => void;
+}) {
+  return (
+    <div
+      onClick={onClick}
+      className={`flex items-start gap-2 px-2.5 py-1.5 rounded-lg bg-primary-foreground/10 mb-1.5 ${
+        onClick ? 'cursor-pointer hover:bg-primary-foreground/15 transition-colors' : ''
+      }`}
+    >
+      <div className="w-0.5 self-stretch shrink-0 rounded-full bg-primary-foreground/30" />
+      <p className="min-w-0 flex-1 text-[11px] leading-snug text-primary-foreground/60 line-clamp-2">
+        {text}
+      </p>
     </div>
   );
 }
@@ -407,6 +572,7 @@ export default function ChatPage() {
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [quotingMsg, setQuotingMsg] = useState<IChatMessage | null>(null);
   const { hasToken: tokenReady } = useAgnesToken();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -493,6 +659,7 @@ export default function ChatPage() {
     setActiveSessionId(newSession.id);
     saveActiveSessionId(newSession.id);
     setInput('');
+    setQuotingMsg(null);
     textareaRef.current?.focus();
   }, [sessions, persistSessions]);
 
@@ -501,6 +668,7 @@ export default function ChatPage() {
     saveActiveSessionId(id);
     setEditingMsgId(null);
     setEditingContent('');
+    setQuotingMsg(null);
   }, []);
 
   const handleRenameSession = useCallback(
@@ -557,6 +725,7 @@ export default function ChatPage() {
   const handleEdit = useCallback((msg: IChatMessage) => {
     setEditingMsgId(msg.id);
     setEditingContent(msg.content);
+    setQuotingMsg(null);
   }, []);
 
   const handleSaveEdit = useCallback(
@@ -691,13 +860,13 @@ export default function ChatPage() {
   );
 
   const handleQuote = useCallback((msg: IChatMessage) => {
-    const quoted = msg.content
-      .split('\n')
-      .map((line) => `> ${line}`)
-      .join('\n');
-    setInput((prev) => (prev ? `${prev}\n${quoted}\n` : `${quoted}\n`));
+    // 如果引用的是当前流式生成的消息，使用 streamingContent
+    const isStreamingTarget = streaming && msg.role === 'assistant';
+    const quoteContent = isStreamingTarget ? streamingContent : msg.content;
+    if (!quoteContent) return;
+    setQuotingMsg({ ...msg, content: quoteContent });
     textareaRef.current?.focus();
-  }, []);
+  }, [streaming, streamingContent]);
 
   // ---- Send message ----
 
@@ -711,16 +880,28 @@ export default function ChatPage() {
       return;
     }
 
+    // 拼接引用内容与用户输入
+    let finalContent = trimmed;
+    if (quotingMsg) {
+      const quoted = quotingMsg.content
+        .split('\n')
+        .map((line) => `> ${line}`)
+        .join('\n');
+      finalContent = `${quoted}\n${trimmed}`;
+    }
+
     const userMsg: IChatMessage = {
       id: `${Date.now()}-user`,
       role: 'user',
-      content: trimmed,
+      content: finalContent,
       timestamp: Date.now(),
+      ...(quotingMsg ? { quoteId: quotingMsg.id } : {}),
     };
 
     const updatedMessages = [...messages, userMsg];
     updateSessionMessages(activeSessionId, updatedMessages);
     setInput('');
+    setQuotingMsg(null);
     setStreaming(true);
     setStreamingContent('');
 
@@ -777,7 +958,7 @@ export default function ChatPage() {
       setStreamingContent('');
       abortRef.current = null;
     }
-  }, [input, messages, streaming, tokenReady, activeSessionId, updateSessionMessages]);
+  }, [input, quotingMsg, messages, streaming, tokenReady, activeSessionId, updateSessionMessages]);
 
   // Cancel streaming
   const handleCancel = useCallback(() => {
@@ -1002,6 +1183,7 @@ export default function ChatPage() {
                   return (
                     <motion.div
                       key={msg.id}
+                      id={`msg-${msg.id}`}
                       initial={{ opacity: 0, y: 12, scale: 0.98 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: -8, scale: 0.98 }}
@@ -1063,12 +1245,29 @@ export default function ChatPage() {
                         ) : (
                           <>
                             {isUser ? (
-                              <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                              (() => {
+                                const { quotedText, bodyText } = parseQuotedContent(msg.content);
+                                return (
+                                  <>
+                                    {quotedText && (
+                                      <QuoteBlock
+                                        text={quotedText}
+                                        onClick={msg.quoteId ? () => {
+                                          const el = document.getElementById(`msg-${msg.quoteId}`);
+                                          el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                        } : undefined}
+                                      />
+                                    )}
+                                    {bodyText && (
+                                      <p className="whitespace-pre-wrap break-words">{bodyText}</p>
+                                    )}
+                                  </>
+                                );
+                              })()
                             ) : (
-                              <div
-                                className="prose-sm prose-invert max-w-none [&_pre]:bg-muted [&_code]:text-accent"
-                                dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
-                              />
+                              <div className="prose-sm prose-invert max-w-none">
+                                <MarkdownContent content={msg.content} />
+                              </div>
                             )}
 
                             {/* Timestamp */}
@@ -1116,10 +1315,9 @@ export default function ChatPage() {
                       <Bot className="size-4 text-primary" />
                     </div>
                     <div className="max-w-[85%] md:max-w-[75%] rounded-2xl rounded-bl-md px-4 py-3 text-sm leading-relaxed bg-card border border-border/40 text-foreground">
-                      <div
-                        className="prose-sm prose-invert max-w-none [&_pre]:bg-muted [&_code]:text-accent"
-                        dangerouslySetInnerHTML={{ __html: renderMarkdown(streamingContent) }}
-                      />
+                      <div className="prose-sm prose-invert max-w-none">
+                        <MarkdownContent content={streamingContent} />
+                      </div>
                       <span className="inline-flex items-center gap-1 mt-2 text-[10px] text-muted-foreground">
                         <span className="inline-block size-1.5 rounded-full bg-accent animate-pulse" />
                         正在生成...
@@ -1171,6 +1369,15 @@ export default function ChatPage() {
         {/* Input area */}
         <div className="shrink-0 border-t border-border/30 bg-background/80 backdrop-blur-md px-4 md:px-6 py-4">
           <form onSubmit={handleSubmit} className="max-w-3xl mx-auto">
+            {/* 引用预览条 */}
+            <AnimatePresence>
+              {quotingMsg && (
+                <QuotePreviewBar
+                  msg={quotingMsg}
+                  onCancel={() => setQuotingMsg(null)}
+                />
+              )}
+            </AnimatePresence>
             <div className="flex items-end gap-3">
               <div className="relative flex-1">
                 <Textarea
@@ -1185,7 +1392,9 @@ export default function ChatPage() {
                   }
                   disabled={!tokenReady || streaming}
                   rows={1}
-                  className="min-h-[44px] max-h-[160px] resize-none pr-4 bg-card/60 border-border/40 focus:border-primary/50 rounded-xl text-sm"
+                  className={`min-h-[44px] max-h-[160px] resize-none pr-4 bg-card/60 border-border/40 focus:border-primary/50 rounded-xl text-sm ${
+                    quotingMsg ? 'rounded-t-none' : ''
+                  }`}
                 />
               </div>
 
