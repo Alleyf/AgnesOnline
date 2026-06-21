@@ -23,6 +23,9 @@ import TokenSettingsPanel from '@/components/TokenSettingsPanel';
 import { useAgnesToken } from '@/hooks/useAgnesToken';
 import AgnesLogo from '@/components/AgnesLogo';
 
+/** 拼接 public 目录资源路径，兼容 GitHub Pages 子路径部署 */
+const asset = (path: string) => `${import.meta.env.BASE_URL}${path.replace(/^\//, '')}`;
+
 const CAPABILITY_CARDS = [
   {
     icon: MessageSquare,
@@ -30,7 +33,7 @@ const CAPABILITY_CARDS = [
     subtitle: 'agnes-2.0-flash',
     description:
       '高效语言模型，支持多轮对话、代码生成、文本分析等场景。流式输出，响应迅速，助你快速构建智能对话体验。',
-    image: '/langding2.png',
+    image: asset('langding2.png'),
     features: ['多轮对话', '流式输出', '代码理解', '128K 上下文'],
     route: '/chat',
     gradient: 'from-primary/20 via-primary/5 to-transparent',
@@ -42,7 +45,7 @@ const CAPABILITY_CARDS = [
     subtitle: 'agnes-image-2.1-flash',
     description:
       '高性能图像生成模型，文本描述即可创作精美图片。支持多种风格，分辨率高达 1024×1024，创意无限。',
-    image: '/langding3.png',
+    image: asset('langding3.png'),
     features: ['文生图', '高分辨率', '多风格', '快速生成'],
     route: '/image-gen',
     gradient: 'from-accent/20 via-accent/5 to-transparent',
@@ -54,7 +57,7 @@ const CAPABILITY_CARDS = [
     subtitle: 'agnes-video-v2.0',
     description:
       '电影级视频生成模型，文本描述即可创作高质量视频内容。支持多种画幅比例，画面流畅自然。',
-    image: '/lanlangding4.png',
+    image: asset('lanlangding4.png'),
     features: ['文生视频', '电影级画质', '多画幅', '流畅运镜'],
     route: '/video-gen',
     gradient: 'from-chart-3/20 via-chart-3/5 to-transparent',
@@ -203,7 +206,7 @@ function HeroSection() {
           >
             <div className="relative rounded-2xl overflow-hidden border border-border/40 shadow-2xl shadow-primary/10">
               <video
-                src="/agnesdemo.mp4"
+                src={asset('agnesdemo.mp4')}
                 autoPlay
                 loop
                 muted
@@ -357,7 +360,7 @@ function DemoVideoSection() {
         >
           <div className="rounded-2xl overflow-hidden border border-border/40 shadow-2xl shadow-primary/5 bg-card">
             <video
-              src="/agnesdemo.mp4"
+              src={asset('agnesdemo.mp4')}
               autoPlay
               loop
               muted
