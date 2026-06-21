@@ -13,6 +13,7 @@ import {
   Palette,
   Film,
   Circle,
+  Key,
   Settings,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -172,6 +173,17 @@ function HeroSection() {
               >
                 开始体验
                 <ArrowRight className="size-4 ml-1.5" />
+              </Button>
+              <Button
+                variant="outline"
+                size="lg"
+                className="rounded-xl"
+                asChild
+              >
+                <a href="https://apihub.agnes-ai.com" target="_blank" rel="noreferrer">
+                  <Key className="size-4 mr-1.5" />
+                  申请 API Key
+                </a>
               </Button>
               <Button
                 variant="outline"
@@ -469,6 +481,17 @@ function CTASection() {
                 生成视频
               </Button>
             </div>
+            <p className="text-sm text-muted-foreground">
+              还没有 API Key？{' '}
+              <a
+                href="https://apihub.agnes-ai.com"
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary hover:underline font-medium"
+              >
+                前往 Agnes AI API Hub 免费申请 →
+              </a>
+            </p>
           </div>
         </motion.div>
       </div>

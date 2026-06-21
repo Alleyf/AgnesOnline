@@ -131,6 +131,21 @@ function SettingsPanel() {
               清除 Token
             </Button>
           </div>
+
+          {/* API 申请入口 */}
+          <div className="pt-3 border-t border-border/30">
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              还没有 API Key？{' '}
+              <a
+                href="https://apihub.agnes-ai.com"
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary hover:underline font-medium"
+              >
+                前往 Agnes AI API Hub 申请 →
+              </a>
+            </p>
+          </div>
         </div>
       </SheetContent>
     </Sheet>
