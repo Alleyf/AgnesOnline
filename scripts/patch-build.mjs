@@ -24,6 +24,7 @@ html = html.replace(/"{{tenantId}}"/g, '""');
 html = html.replace(/"{{userName}}"/g, '""');
 html = html.replace(/"{{csrfToken}}"/g, '""');
 html = html.replace(/"{{environment}}"/g, '""');
+html = html.replace(/{{appName}}/g, "Agnes Online");
 
 fs.writeFileSync(indexPath, html);
 console.log("Patched dist/client/index.html for standalone deployment");
