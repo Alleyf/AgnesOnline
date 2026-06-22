@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { Home, MessageSquare, Image, Video, Settings, Circle, Folder } from 'lucide-react';
+import { Home, MessageSquare, Image, Video, Settings, Circle, Folder, Github, Sun, Moon } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -25,6 +25,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { useState, useCallback } from 'react';
 import { useAgnesToken } from '@/hooks/useAgnesToken';
+import { useTheme } from '@/hooks/useTheme';
 import AgnesLogo from '@/components/AgnesLogo';
 
 const BASE_URL = 'https://apihub.agnes-ai.com/v1';
@@ -152,6 +153,38 @@ function SettingsPanel() {
   );
 }
 
+const REPO_URL = 'https://github.com/Alleyf/AgnesOnline';
+
+function ThemeToggle() {
+  const { theme, toggleTheme } = useTheme();
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="size-8 text-sidebar-foreground/60 hover:text-sidebar-foreground"
+      onClick={toggleTheme}
+      aria-label={theme === 'dark' ? '切换到亮色模式' : '切换到暗色模式'}
+    >
+      {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
+    </Button>
+  );
+}
+
+function GitHubLink() {
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="size-8 text-sidebar-foreground/60 hover:text-sidebar-foreground"
+      asChild
+    >
+      <a href={REPO_URL} target="_blank" rel="noreferrer" aria-label="GitHub 仓库">
+        <Github className="size-4" />
+      </a>
+    </Button>
+  );
+}
+
 export default function AppSidebar() {
   const { pathname } = useLocation();
   const { state } = useSidebar();
@@ -208,9 +241,9 @@ export default function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      {/* Footer: Token status + Settings */}
+      {/* Footer: Token status + Theme toggle + GitHub + Settings */}
       <SidebarFooter className="border-t border-sidebar-border">
-        <div className="flex items-center gap-2 px-2 py-3 group-data-[state=collapsed]:px-0 group-data-[state=collapsed]:justify-center">
+        <div className="flex items-center gap-1 px-2 py-3 group-data-[state=collapsed]:px-0 group-data-[state=collapsed]:justify-center">
           <div className="flex items-center gap-2 min-w-0 group-data-[state=collapsed]:hidden flex-1">
             <Circle
               className={`size-2 shrink-0 ${hasToken ? 'fill-success text-success' : 'fill-destructive text-destructive'}`}
@@ -219,6 +252,8 @@ export default function AppSidebar() {
               {hasToken ? 'Token 已配置' : 'Token 未配置'}
             </span>
           </div>
+          <ThemeToggle />
+          <GitHubLink />
           <SettingsPanel />
         </div>
       </SidebarFooter>

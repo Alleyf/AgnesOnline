@@ -1,5 +1,6 @@
 import { Outlet } from "react-router-dom";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
+import { Toaster } from "@/components/ui/sonner";
 import AppSidebar from "@/components/AppSidebar";
 
 export function Layout() {
@@ -11,6 +12,7 @@ export function Layout() {
           <Outlet />
         </main>
       </SidebarInset>
+      <Toaster />
     </SidebarProvider>
   );
 }

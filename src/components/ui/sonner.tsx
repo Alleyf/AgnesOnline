@@ -9,11 +9,13 @@ import {
   XIcon,
 } from 'lucide-react';
 import { Toaster as Sonner, type ToasterProps } from 'sonner';
+import { useTheme } from '@/hooks/useTheme';
 
 function Toaster({ className, style, icons, ...props }: ToasterProps) {
+  const { theme } = useTheme();
   return (
     <Sonner
-      theme="dark"
+      theme={theme}
       className={cn('toaster group', className)}
       position="top-center"
       icons={{
