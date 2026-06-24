@@ -10,6 +10,7 @@
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FAlleyf%2FAgnesOnline)
 [![GitHub Pages](https://img.shields.io/badge/Deploy-GitHub%20Pages-blue?logo=github)](https://alleyf.github.io/AgnesOnline/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 [English](#english) · [简体中文](#简体中文)
 
@@ -40,10 +41,6 @@
   <tr>
     <td><img src="public/langding3.png" alt="图像生成" width="400" /></td>
     <td><img src="public/lanlangding4.png" alt="视频创作" width="400" /></td>
-  </tr>
-  <tr>
-    <td><img src="public/lanlangding5.png" alt="资产管理" width="400" /></td>
-    <td></td>
   </tr>
 </table>
 
@@ -115,7 +112,6 @@ AgnesOnline/
 │   ├── langding2.png         # 对话页预览图
 │   ├── langding3.png         # 图像生成预览图
 │   ├── lanlangding4.png      # 视频创作预览图
-│   ├── lanlangding5.png      # 资产管理预览图
 │   └── agnesdemo.mp4         # 平台演示视频
 ├── src/
 │   ├── index.tsx             # 入口（Provider 层级 + 样式引入）
@@ -207,7 +203,7 @@ import heroImage from "@shared/static/images/hero.png";
 
 ### 📄 许可证
 
-本项目暂未添加开源许可证。如需使用，请联系作者。
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
 
@@ -254,7 +250,7 @@ Issues and Pull Requests are welcome! Please fork, create a feature branch, and 
 
 ### 📄 License
 
-No open-source license has been added yet. Contact the author if you wish to use this project.
+This project is licensed under the [MIT License](LICENSE).
 
 ---
 
